@@ -1,0 +1,74 @@
+name: Export Android SDK Offline
+
+on:
+  workflow_dispatch:
+
+jobs:
+  export-sdk:
+    runs-on: windows-latest
+
+    steps:
+      - name: Show Android SDK
+        shell: powershell
+        run: |
+          Write-Host "ANDROID_HOME = $env:ANDROID_HOME"
+          Write-Host "ANDROID_SDK_ROOT = $env:ANDROID_SDK_ROOT"
+
+          Get-ChildItem $env:ANDROID_HOME
+
+      - name: Prepare offline Android SDK
+        shell: powershell
+        run: |
+          $source = $env:ANDROID_HOME
+          $dest = "$env:GITHUB_WORKSPACE\android-sdk"
+
+          New-Item -ItemType Directory -Force $dest | Out-Null
+
+          Copy-Item "$source\platform-tools" "$dest\platform-tools" -Recurse -Force
+
+          if (Test-Path "$source\cmdline-tools") {
+              Copy-Item "$source\cmdline-tools" "$dest\cmdline-tools" -Recurse -Force
+          }
+
+          if (Test-Path "$source\licenses") {
+              Copy-Item "$source\licenses" "$dest\licenses" -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Force "$dest\platforms" | Out-Null
+          Copy-Item "$source\platforms\android-36" `
+                    "$dest\platforms\android-36" `
+                    -Recurse -Force
+
+          New-Item -ItemType Directory -Force "$dest\build-tools" | Out-Null
+
+          $buildTools = Get-ChildItem "$source\build-tools" `
+            -Directory |
+            Sort-Object {
+              try { [version]$_.Name }
+              catch { [version]"0.0.0" }
+            } -Descending |
+            Select-Object -First 1
+
+          Write-Host "Using Build Tools: $($buildTools.Name)"
+
+          Copy-Item $buildTools.FullName `
+                    "$dest\build-tools\$($buildTools.Name)" `
+                    -Recurse -Force
+
+          Write-Host "Prepared SDK:"
+          Get-ChildItem $dest -Recurse -Depth 2
+
+      - name: Create SDK ZIP
+        shell: powershell
+        run: |
+          Compress-Archive `
+            -Path "$env:GITHUB_WORKSPACE\android-sdk" `
+            -DestinationPath "$env:GITHUB_WORKSPACE\android-sdk-windows.zip" `
+            -CompressionLevel Optimal
+
+      - name: Upload Android SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-sdk-windows
+          path: android-sdk-windows.zip
+          retention-days: 7
