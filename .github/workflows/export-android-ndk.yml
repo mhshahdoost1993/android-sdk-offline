@@ -1,0 +1,65 @@
+name: Export Android NDK Offline
+
+on:
+  workflow_dispatch:
+
+jobs:
+  export-ndk:
+    runs-on: windows-latest
+
+    steps:
+      - name: Install required NDK
+        shell: powershell
+        run: |
+          $sdkManager = "$env:ANDROID_HOME\cmdline-tools\latest\bin\sdkmanager.bat"
+
+          Write-Host "ANDROID_HOME = $env:ANDROID_HOME"
+          Write-Host "SDK Manager = $sdkManager"
+
+          & $sdkManager `
+            --sdk_root="$env:ANDROID_HOME" `
+            "ndk;28.2.13676358"
+
+          if ($LASTEXITCODE -ne 0) {
+              throw "NDK installation failed."
+          }
+
+      - name: Verify NDK
+        shell: powershell
+        run: |
+          $ndk = "$env:ANDROID_HOME\ndk\28.2.13676358"
+
+          if (!(Test-Path "$ndk\source.properties")) {
+              throw "NDK was not found at $ndk"
+          }
+
+          Get-ChildItem $ndk | Select-Object Name
+
+      - name: Prepare offline package
+        shell: powershell
+        run: |
+          $source = "$env:ANDROID_HOME\ndk\28.2.13676358"
+          $dest = "$env:GITHUB_WORKSPACE\android-sdk\ndk\28.2.13676358"
+
+          New-Item -ItemType Directory -Force $dest | Out-Null
+
+          Copy-Item `
+            "$source\*" `
+            "$dest" `
+            -Recurse `
+            -Force
+
+      - name: Create ZIP
+        shell: powershell
+        run: |
+          Compress-Archive `
+            -Path "$env:GITHUB_WORKSPACE\android-sdk" `
+            -DestinationPath "$env:GITHUB_WORKSPACE\android-ndk-28.2.13676358.zip" `
+            -CompressionLevel Optimal
+
+      - name: Upload NDK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-ndk-28.2.13676358-windows
+          path: android-ndk-28.2.13676358.zip
+          retention-days: 7
