@@ -1,0 +1,66 @@
+name: Export Android Build Tools 36
+
+on:
+  workflow_dispatch:
+
+jobs:
+  export-build-tools:
+    runs-on: windows-latest
+
+    steps:
+      - name: Install Build Tools 36.0.0
+        shell: powershell
+        run: |
+          $sdkManager = "$env:ANDROID_HOME\cmdline-tools\latest\bin\sdkmanager.bat"
+
+          Write-Host "ANDROID_HOME = $env:ANDROID_HOME"
+
+          if (!(Test-Path "$env:ANDROID_HOME\build-tools\36.0.0")) {
+              & $sdkManager `
+                --sdk_root="$env:ANDROID_HOME" `
+                "build-tools;36.0.0"
+
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Build Tools 36.0.0 installation failed."
+              }
+          }
+
+      - name: Verify Build Tools
+        shell: powershell
+        run: |
+          $buildTools = "$env:ANDROID_HOME\build-tools\36.0.0"
+
+          if (!(Test-Path "$buildTools\aapt2.exe")) {
+              throw "Build Tools 36.0.0 was not found."
+          }
+
+          Get-ChildItem $buildTools | Select-Object Name
+
+      - name: Prepare offline package
+        shell: powershell
+        run: |
+          $source = "$env:ANDROID_HOME\build-tools\36.0.0"
+          $dest = "$env:GITHUB_WORKSPACE\android-sdk\build-tools\36.0.0"
+
+          New-Item -ItemType Directory -Force $dest | Out-Null
+
+          Copy-Item `
+            "$source\*" `
+            "$dest" `
+            -Recurse `
+            -Force
+
+      - name: Create ZIP
+        shell: powershell
+        run: |
+          Compress-Archive `
+            -Path "$env:GITHUB_WORKSPACE\android-sdk" `
+            -DestinationPath "$env:GITHUB_WORKSPACE\android-build-tools-36.zip" `
+            -CompressionLevel Optimal
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-tools-36.0.0-windows
+          path: android-build-tools-36.zip
+          retention-days: 7
